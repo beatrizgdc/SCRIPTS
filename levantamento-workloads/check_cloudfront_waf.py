@@ -15,7 +15,17 @@ from datetime import datetime, timezone
 
 # ─── CONFIGURAÇÃO — PREENCHA ANTES DE RODAR ───────────────────
 
-# Lista de contas membro a verificar.
+# Modo de execução:
+#   False → multi-conta via payer com assume role (preencha ACCOUNTS abaixo)
+#   True  → roda direto na conta atual, sem assume role
+#            (use no CloudShell da própria conta quando não há acesso via payer)
+SINGLE_ACCOUNT_MODE = False
+
+# Nome amigável usado no relatório quando SINGLE_ACCOUNT_MODE = True.
+# Ignorado no modo multi-conta.
+SINGLE_ACCOUNT_NAME = "NOME_DA_CONTA"
+
+# Lista de contas membro a verificar (usado apenas quando SINGLE_ACCOUNT_MODE = False).
 ACCOUNTS = [
     {"id": "111111111111", "name": "NOME_CONTA_1"},
     {"id": "222222222222", "name": "NOME_CONTA_2"},
@@ -23,6 +33,7 @@ ACCOUNTS = [
 ]
 
 # Roles que o script vai tentar assumir, em ordem de preferência.
+# Ignorado quando SINGLE_ACCOUNT_MODE = True.
 ROLE_CANDIDATES = [
     "AWSControlTowerExecution",
     "aws-controltower-AdministratorExecutionRole",
@@ -98,37 +109,53 @@ def check_cloudfront_waf(session, account_id, account_name):
 
 
 def main():
-    if not ACCOUNTS or ACCOUNTS[0]["id"] in ("111111111111", "222222222222"):
-        print("ERRO: preencha a lista ACCOUNTS no início do script antes de rodar.")
-        return
-
     sts_local = boto3.client("sts")
     current_account = sts_local.get_caller_identity()["Account"]
-
-    log(f"Conta de execução (payer): {current_account}")
-    log(f"Verificando CloudFront WAF em {len(ACCOUNTS)} contas...\n")
 
     all_results = []
     failed = []
 
-    for acc in ACCOUNTS:
-        account_id = acc["id"]
-        account_name = acc["name"]
-        log(f"Processando: {account_name} ({account_id})")
+    if SINGLE_ACCOUNT_MODE:
+        # ── Modo conta única (sem assume role) ─────────────────────────────
+        if SINGLE_ACCOUNT_NAME == "NOME_DA_CONTA":
+            print("ERRO: preencha SINGLE_ACCOUNT_NAME no início do script antes de rodar.")
+            return
 
-        if account_id == current_account:
-            session = boto3.Session()
-        else:
-            session, role = assume_role(account_id)
-            if not session:
-                log(f"  ⚠️  Sem role acessível — pulando")
-                failed.append(f"{account_name} ({account_id})")
-                continue
-            log(f"  → Role: {role}")
-
-        results = check_cloudfront_waf(session, account_id, account_name)
+        log(f"Modo: SINGLE ACCOUNT — {SINGLE_ACCOUNT_NAME} ({current_account})")
+        session = boto3.Session()
+        results = check_cloudfront_waf(session, current_account, SINGLE_ACCOUNT_NAME)
         all_results.extend(results)
         log(f"  → {len(results)} distribuições encontradas")
+
+    else:
+        # ── Modo multi-conta via payer (assume role) ────────────────────────
+        if not ACCOUNTS or ACCOUNTS[0]["id"] in ("111111111111", "222222222222"):
+            print("ERRO: preencha a lista ACCOUNTS no início do script antes de rodar.")
+            print("      Ou defina SINGLE_ACCOUNT_MODE = True para rodar na conta atual.")
+            return
+
+        log(f"Modo: MULTI-CONTA — payer: {current_account}")
+        log(f"Verificando CloudFront WAF em {len(ACCOUNTS)} contas...\n")
+
+        for acc in ACCOUNTS:
+            account_id = acc["id"]
+            account_name = acc["name"]
+            log(f"Processando: {account_name} ({account_id})")
+
+            if account_id == current_account:
+                session = boto3.Session()
+                log(f"  → Conta atual — usando sessão local")
+            else:
+                session, role = assume_role(account_id)
+                if not session:
+                    log(f"  ⚠️  Sem role acessível — pulando")
+                    failed.append(f"{account_name} ({account_id})")
+                    continue
+                log(f"  → Role: {role}")
+
+            results = check_cloudfront_waf(session, account_id, account_name)
+            all_results.extend(results)
+            log(f"  → {len(results)} distribuições encontradas")
 
     # ── Relatório ──────────────────────────────────────────────
     lines = []
