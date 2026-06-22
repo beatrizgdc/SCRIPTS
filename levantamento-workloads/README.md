@@ -40,7 +40,6 @@ TARGET_REGIONS = ["us-east-1", "sa-east-1"]  # regiões alvo
 ROLE_CANDIDATES = [
     "AWSControlTowerExecution",
     "OrganizationAccountAccessRole",
-    "darede-switch-role",
     ...
 ]
 ```
@@ -75,11 +74,39 @@ python3 levantamento_single_account.py 2>&1 | tee levantamento_$(date +%Y%m%d_%H
 
 ### `check_cloudfront_waf.py` — Inventário CloudFront × WAF
 
-Utilitário focado: roda na payer e verifica quais distribuições CloudFront têm WAF associado em todas as contas. Gera `output/cloudfront_waf_report.txt` com o status de cada distribuição (com/sem WAF, ID da WebACL se houver).
+Utilitário focado: verifica quais distribuições CloudFront têm WAF associado e gera `output/cloudfront_waf_report.txt` com o status de cada distribuição (com/sem WAF, ID da WebACL se houver). Útil para identificar distribuições sem proteção WAF antes de preencher os diagramas.
 
-Útil para identificar distribuições sem proteção WAF antes de preencher os diagramas.
+Suporta dois modos de execução, controlados pela variável `SINGLE_ACCOUNT_MODE` no topo do script:
 
-**O que editar:** mesmo esquema do `workload_discovery.py` — bloco `ACCOUNTS` e `ROLE_CANDIDATES`.
+**Modo multi-conta via payer** (`SINGLE_ACCOUNT_MODE = False` — padrão)
+
+Roda no CloudShell da payer e faz assume role nas contas membro. Preencha `ACCOUNTS` e `ROLE_CANDIDATES`:
+
+```python
+SINGLE_ACCOUNT_MODE = False
+
+ACCOUNTS = [
+    {"id": "111122223333", "name": "NOME_CONTA_1"},
+    ...
+]
+
+ROLE_CANDIDATES = [
+    "AWSControlTowerExecution",
+    "OrganizationAccountAccessRole",
+    ...
+]
+```
+
+**Modo conta única** (`SINGLE_ACCOUNT_MODE = True`)
+
+Roda direto na conta, sem assume role. Use no CloudShell da própria conta quando não há acesso via payer. Preencha apenas `SINGLE_ACCOUNT_NAME`:
+
+```python
+SINGLE_ACCOUNT_MODE = True
+SINGLE_ACCOUNT_NAME = "nome-da-conta"
+```
+
+O relatório de saída é idêntico nos dois modos.
 
 **Uso:**
 ```bash
