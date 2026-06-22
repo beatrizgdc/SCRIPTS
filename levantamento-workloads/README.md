@@ -1,6 +1,6 @@
 # Levantamento de Workloads — Scripts de Discovery AWS
 
-Scripts Python para levantamento técnico de infraestrutura AWS, usados na documentação de Workloads no Confluence (MSP Darede).
+Scripts Python para levantamento técnico de infraestrutura AWS, usados na documentação de Workloads no Confluence.
 
 Todos os scripts rodam no **AWS CloudShell** e geram saída em `./output/`.
 
